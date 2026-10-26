@@ -1,0 +1,98 @@
+name: Deploy NASE-842 Backend
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: backend-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: us-east-1
+      AWS_ACCOUNT_ID: "253650698585"
+      ECR_REPOSITORY: nase842-flask
+      LAMBDA_FUNCTION: nase842-flask
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::253650698585:role/nase842-github-backend-deploy
+          aws-region: us-east-1
+
+      - name: Verify AWS account
+        run: |
+          ACCOUNT=$(aws sts get-caller-identity \
+            --query Account --output text)
+          test "$ACCOUNT" = "$AWS_ACCOUNT_ID"
+
+      - name: Log in to Amazon ECR
+        run: |
+          aws ecr get-login-password \
+            --region "$AWS_REGION" | \
+          docker login \
+            --username AWS \
+            --password-stdin \
+            "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+
+      - name: Build and push Docker image
+        env:
+          IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          IMAGE_URI="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG"
+
+          docker build \
+            --platform linux/amd64 \
+            -f Dockerfile.lambda \
+            -t "$IMAGE_URI" \
+            .
+
+          docker push "$IMAGE_URI"
+
+          echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
+
+      - name: Deploy image to AWS Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name "$LAMBDA_FUNCTION" \
+            --image-uri "$IMAGE_URI" \
+            --region "$AWS_REGION" \
+            --query '{FunctionName:FunctionName,LastUpdateStatus:LastUpdateStatus}' \
+            --output json
+
+          aws lambda wait function-updated \
+            --function-name "$LAMBDA_FUNCTION" \
+            --region "$AWS_REGION"
+
+          STATUS=$(aws lambda get-function-configuration \
+            --function-name "$LAMBDA_FUNCTION" \
+            --region "$AWS_REGION" \
+            --query 'LastUpdateStatus' \
+            --output text)
+
+          echo "Lambda update status: $STATUS"
+          test "$STATUS" = "Successful"
+
+      - name: Verify Flask API health
+        run: |
+          curl --fail --silent --show-error \
+            --retry 6 \
+            --retry-delay 5 \
+            --retry-all-errors \
+            https://api.realworld.eldeeb-o-skillup.vertexlab.net/api/ping
+
+          echo
+          echo "Backend deployment successful!"
