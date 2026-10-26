@@ -32,4 +32,5 @@ EXPOSE 8080
 
 # Start Flask using Gunicorn
 CMD ["gunicorn", "--bind", "0.0.0.0:8080", \
-     "--workers", "1", "realworld.app:app"]
+     "--workers", "1", "--timeout", "0", \
+     "--no-control-socket", "realworld.app:app"]
