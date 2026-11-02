@@ -8,7 +8,21 @@ from realworld.api.routes.v1.articles.routes import articles_blueprint, tags_blu
 
 def create_app() -> Flask:
     app = Flask(__name__)
-    CORS(app)
+    CORS(
+        app,
+        resources={
+            r"/api/.*": {
+                "origins": [
+                    "https://dvqn80eroo0tk.cloudfront.net",
+                    "https://realworld.eldeeb-o-skillup.vertexlab.net",
+                    "http://localhost:4173",
+                    "http://127.0.0.1:4173",
+                    "http://localhost:5173",
+                    "http://127.0.0.1:5173",
+                ]
+            }
+        },
+    )
     _register_blueprints(app)
     _register_error_handlers(app)
     return app
