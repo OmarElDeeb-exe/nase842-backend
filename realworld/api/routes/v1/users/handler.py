@@ -60,6 +60,7 @@ def update_user(
             """
             UPDATE users
             SET email = :email,
+                username = COALESCE(:username, username),
                 bio = :bio,
                 image_url = :image,
                 password_hash = COALESCE(:password_hash, password_hash),
@@ -70,6 +71,7 @@ def update_user(
         ).bindparams(
             user_id=user_id,
             email=data.email,
+            username=data.username,
             bio=data.bio,
             image=data.image,
             password_hash=hash_password(data.password) if data.password else None,
