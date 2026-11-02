@@ -1,4 +1,5 @@
 from flask import Blueprint, request
+from sqlalchemy.exc import IntegrityError
 from realworld.api.core.db import get_db_connection
 from realworld.api.core.auth import generate_jwt, validate_token, get_user_id_from_token
 from realworld.api.routes.v1.users import handler as users_handler
@@ -75,13 +76,16 @@ def get_current_user() -> dict:
 @users_blueprint.route("/user", methods=["PUT"])
 def update_user() -> dict:
     data = UpdateUserRequest.model_validate(request.json)
-    with get_db_connection() as db_conn:
-        if not (
-            user := users_handler.update_user(
-                db_conn, get_user_id_from_token(), data.user
-            )
-        ):
-            return {"error": "User does not exist."}, 404
+    try:
+        with get_db_connection() as db_conn:
+            if not (
+                user := users_handler.update_user(
+                    db_conn, get_user_id_from_token(), data.user
+                )
+            ):
+                return {"error": "User does not exist."}, 404
+    except IntegrityError:
+        return {"error": "Username or email is already in use."}, 409
 
     return AuthUserResponse(
         user=AuthUser(
