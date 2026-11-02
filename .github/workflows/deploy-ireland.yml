@@ -1,0 +1,91 @@
+name: Deploy NASE-842 Backend (Ireland)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: nase842-backend-ireland
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: eu-west-1
+      AWS_ACCOUNT_ID: "253650698585"
+      ECR_REPOSITORY: nase842-flask
+      LAMBDA_FUNCTION: nase842-flask
+      API_HEALTH_URL: https://ezes0o2ub8.execute-api.eu-west-1.amazonaws.com/api/ping
+
+    steps:
+      - name: Checkout application
+        uses: actions/checkout@v6
+
+      - name: Authenticate to AWS with GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::253650698585:role/nase842-github-backend-deploy-eu
+          aws-region: eu-west-1
+
+      - name: Verify Ireland deployment target
+        run: |
+          set -euo pipefail
+          ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
+          test "$ACCOUNT" = "$AWS_ACCOUNT_ID"
+          aws ecr describe-repositories --region "$AWS_REGION" \
+            --repository-names "$ECR_REPOSITORY" >/dev/null
+          STATE="$(aws lambda get-function-configuration \
+            --function-name "$LAMBDA_FUNCTION" --region "$AWS_REGION" \
+            --query State --output text)"
+          test "$STATE" = "Active"
+
+      - name: Log in to Ireland ECR
+        run: |
+          aws ecr get-login-password --region "$AWS_REGION" | \
+            docker login --username AWS --password-stdin \
+            "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+
+      - name: Build and publish Lambda-compatible image
+        run: |
+          set -euo pipefail
+          IMAGE_TAG="${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          IMAGE_URI="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker build --platform linux/amd64 \
+            --provenance=false --sbom=false \
+            -f Dockerfile.lambda -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
+          echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
+
+      - name: Update Ireland Lambda
+        run: |
+          set -euo pipefail
+          aws lambda update-function-code \
+            --function-name "$LAMBDA_FUNCTION" \
+            --image-uri "$IMAGE_URI" \
+            --region "$AWS_REGION" >/dev/null
+          aws lambda wait function-updated \
+            --function-name "$LAMBDA_FUNCTION" \
+            --region "$AWS_REGION"
+          STATE="$(aws lambda get-function-configuration \
+            --function-name "$LAMBDA_FUNCTION" --region "$AWS_REGION" \
+            --query LastUpdateStatus --output text)"
+          test "$STATE" = "Successful"
+          DEPLOYED_IMAGE="$(aws lambda get-function \
+            --function-name "$LAMBDA_FUNCTION" --region "$AWS_REGION" \
+            --query Code.ImageUri --output text)"
+          test "$DEPLOYED_IMAGE" = "$IMAGE_URI"
+
+      - name: Verify Ireland API health
+        run: |
+          set -euo pipefail
+          RESULT="$(curl --fail --silent --show-error \
+            --retry 6 --retry-delay 5 --retry-all-errors \
+            "$API_HEALTH_URL")"
+          test "$RESULT" = "pong"
+          echo "Ireland backend health check passed."
