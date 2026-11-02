@@ -1,6 +1,8 @@
 name: Deploy NASE-842 Backend (Ireland)
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
