@@ -141,3 +141,49 @@ def test_change_password(client, add_user):
         }},
     )
     assert new_login.status_code == 200
+
+def test_change_username(client, add_user):
+    user = add_user(username="original-username")
+    login = client.post(
+        "/api/users/login",
+        json={"user": {"email": user["email"], "password": user["password"]}},
+    )
+    assert login.status_code == 200
+    token = login.json["user"]["token"]
+
+    updated = client.put(
+        "/api/user",
+        headers={"Authorization": f"Token {token}"},
+        json={"user": {"email": user["email"], "username": "updated-username"}},
+    )
+    assert updated.status_code == 200
+    assert updated.json["user"]["username"] == "updated-username"
+    assert updated.json["user"]["token"]
+
+    profile = client.get("/api/profiles/updated-username")
+    assert profile.status_code == 200
+    assert profile.json["profile"]["username"] == "updated-username"
+
+    old_profile = client.get("/api/profiles/original-username")
+    assert old_profile.status_code == 404
+
+
+def test_duplicate_username_update_returns_conflict(client, add_user):
+    user = add_user(username="original-username")
+    add_user(username="reserved-username")
+
+    login = client.post(
+        "/api/users/login",
+        json={"user": {"email": user["email"], "password": user["password"]}},
+    )
+    assert login.status_code == 200
+    token = login.json["user"]["token"]
+
+    updated = client.put(
+        "/api/user",
+        headers={"Authorization": f"Token {token}"},
+        json={"user": {"email": user["email"], "username": "reserved-username"}},
+    )
+    assert updated.status_code == 409
+    assert updated.json["error"] == "Username or email is already in use."
+
