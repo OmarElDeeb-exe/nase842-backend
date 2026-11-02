@@ -38,8 +38,6 @@ jobs:
           set -euo pipefail
           ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
           test "$ACCOUNT" = "$AWS_ACCOUNT_ID"
-          aws ecr describe-repositories --region "$AWS_REGION" \
-            --repository-names "$ECR_REPOSITORY" >/dev/null
           STATE="$(aws lambda get-function-configuration \
             --function-name "$LAMBDA_FUNCTION" --region "$AWS_REGION" \
             --query State --output text)"
