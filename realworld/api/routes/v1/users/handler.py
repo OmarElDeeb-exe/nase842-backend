@@ -62,6 +62,7 @@ def update_user(
             SET email = :email,
                 bio = :bio,
                 image_url = :image,
+                password_hash = COALESCE(:password_hash, password_hash),
                 updated_date = CURRENT_TIMESTAMP
             WHERE id = :user_id
             RETURNING username, email, bio, image_url
@@ -71,6 +72,7 @@ def update_user(
             email=data.email,
             bio=data.bio,
             image=data.image,
+            password_hash=hash_password(data.password) if data.password else None,
         )
     ).fetchone()
 

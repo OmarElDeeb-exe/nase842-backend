@@ -83,4 +83,12 @@ def update_user() -> dict:
         ):
             return {"error": "User does not exist."}, 404
 
-    return UserDataResponse(user=user).model_dump()
+    return AuthUserResponse(
+        user=AuthUser(
+            email=user.email,
+            token=generate_jwt(get_user_id_from_token()),
+            username=user.username,
+            bio=user.bio,
+            image=user.image,
+        )
+    ).model_dump()

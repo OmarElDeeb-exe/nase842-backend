@@ -28,6 +28,7 @@ class UpdateUserData(BaseCamelModel):
     email: str
     bio: typ.Optional[str] = None
     image: typ.Optional[str] = None
+    password: typ.Optional[str] = None
 
 
 class UpdateUserRequest(BaseCamelModel):

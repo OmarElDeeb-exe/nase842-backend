@@ -88,7 +88,9 @@ def test_update_user(client, add_user):
     )
 
     assert resp.status_code == 200
-    assert resp.json == {
+    response_data = resp.get_json()
+    assert response_data["user"].pop("token")
+    assert response_data == {
         "user": {
             "username": user["username"],
             "email": "updated@realworld.io",
@@ -96,3 +98,46 @@ def test_update_user(client, add_user):
             "image": "updated image",
         }
     }
+
+
+def test_change_password(client, add_user):
+    user = add_user(password="old-test-password")
+
+    login = client.post(
+        "/api/users/login",
+        json={"user": {
+            "email": user["email"],
+            "password": "old-test-password",
+        }},
+    )
+    assert login.status_code == 200
+    token = login.json["user"]["token"]
+
+    updated = client.put(
+        "/api/user",
+        headers={"Authorization": f"Token {token}"},
+        json={"user": {
+            "email": user["email"],
+            "password": "new-test-password",
+        }},
+    )
+    assert updated.status_code == 200
+    assert updated.json["user"]["token"]
+
+    old_login = client.post(
+        "/api/users/login",
+        json={"user": {
+            "email": user["email"],
+            "password": "old-test-password",
+        }},
+    )
+    assert old_login.status_code != 200
+
+    new_login = client.post(
+        "/api/users/login",
+        json={"user": {
+            "email": user["email"],
+            "password": "new-test-password",
+        }},
+    )
+    assert new_login.status_code == 200

@@ -4,7 +4,8 @@ from unittest.mock import patch
 from realworld.app import create_app
 from sqlalchemy import text as satext
 from datetime import datetime, timezone as tz
-from realworld.api.core.db import _ENGINE, _Session
+from sqlalchemy.orm import sessionmaker
+from realworld.api.core.db import _get_engine
 from realworld.api.routes.v1.users.handler import hash_password
 
 # from realworld.api.core.auth import generate_jwt
@@ -35,7 +36,7 @@ def client(test_app):
 
 @fixture(scope="session")
 def mock_conn():
-    connection = _ENGINE.connect()
+    connection = _get_engine().connect()
     yield connection
     connection.close()
 
@@ -43,7 +44,7 @@ def mock_conn():
 @fixture(scope="function")
 def mock_db_session(mock_conn):
     transaction = mock_conn.begin()
-    session = _Session(bind=mock_conn)
+    session = sessionmaker(bind=mock_conn)()
     yield session
     session.close()
     transaction.rollback()
