@@ -26,6 +26,7 @@ class RegisterUserRequest(BaseCamelModel):
 # PUT /api/user
 class UpdateUserData(BaseCamelModel):
     email: str
+    username: typ.Optional[str] = None
     bio: typ.Optional[str] = None
     image: typ.Optional[str] = None
     password: typ.Optional[str] = None
